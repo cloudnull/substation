@@ -1,0 +1,40 @@
+# OpenStack clouds.yaml configuration file
+# Place this file at ~/.config/openstack/clouds.yaml
+
+clouds:
+  # Example cloud with username/password authentication
+  mycloud:
+    auth:
+      auth_url: https://identity.example.com:5000/v3
+      username: admin
+      password: secretpassword
+      project_name: admin
+      user_domain_name: Default
+      project_domain_name: Default
+    region_name: RegionOne
+    interface: public
+    identity_api_version: 3
+
+  # Example cloud with application credentials
+  devcloud:
+    auth:
+      auth_url: https://keystone.dev.example.com:5000/v3
+      application_credential_id: abc123def456
+      application_credential_secret: super-secret-key
+      project_name: development
+    region_name: us-west-1
+    interface: public
+    identity_api_version: 3
+
+  # Example Rackspace cloud configuration
+  rackspace:
+    auth:
+      auth_url: https://identity.api.rackspacecloud.com/v2.0
+      username: myusername
+      password: mypassword
+      project_name: 123456
+      user_domain_name: Default
+      project_domain_name: Default
+    region_name: DFW
+    interface: public
+    identity_api_version: 3

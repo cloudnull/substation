@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:otui}",
+            "name": "Debug otui",
+            "program": "${workspaceFolder:otui}/.build/debug/otui",
+            "preLaunchTask": "swift: Build Debug otui"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:otui}",
+            "name": "Release otui",
+            "program": "${workspaceFolder:otui}/.build/release/otui",
+            "preLaunchTask": "swift: Build Release otui"
+        }
+    ]
+}
