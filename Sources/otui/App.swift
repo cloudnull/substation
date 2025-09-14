@@ -16,7 +16,7 @@ struct OTUI {
         }
         let userDomain = env["OS_USER_DOMAIN_NAME"] ?? "Default"
         let projectDomain = env["OS_PROJECT_DOMAIN_NAME"] ?? "Default"
-        let config = OTConfig(authURL: authURL, region: region, projectName: projectName)
+        let config = OTConfig(authURL: authURL, region: region, projectName: projectName, projectDomain: projectDomain)
         let credentials: OTCredentials = .password(username: username, password: password, userDomain: userDomain, projectDomain: projectDomain)
         do {
             let client = try await OTClient.connect(config: config, credentials: credentials)

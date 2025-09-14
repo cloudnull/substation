@@ -7,11 +7,13 @@ public struct OTConfig {
     public let authURL: URL
     public let region: String
     public let projectName: String
+    public let projectDomain: String
 
-    public init(authURL: URL, region: String, projectName: String) {
+    public init(authURL: URL, region: String, projectName: String, projectDomain: String) {
         self.authURL = authURL
         self.region = region
         self.projectName = projectName
+        self.projectDomain = projectDomain
     }
 }
 
@@ -286,7 +288,8 @@ struct AuthRequest: Encodable {
             identity: Identity(methods: credentials.methods,
                                password: credentials.passwordCredentials,
                                applicationCredential: credentials.applicationCredential),
-            scope: Scope(project: Project(name: config.projectName))
+            scope: Scope(project: Project(name: config.projectName,
+                                          domain: Domain(name: config.projectDomain)))
         )
     }
 
@@ -315,6 +318,7 @@ struct AuthRequest: Encodable {
     }
     struct Project: Encodable {
         let name: String
+        let domain: Domain
     }
 }
 
