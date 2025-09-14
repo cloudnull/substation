@@ -31,6 +31,14 @@ final class TUI {
     private var searchQuery: String?
     private var statusMessage: String?
 
+    private let logo = [
+        "  ____   _______   _    _   _____ ",
+        " / __ \\ |__   __| | |  | | |_   _|",
+        "| |  | |   | |   | |  | |   | |  ",
+        "| |  | |   | |   | |  | |   | |  ",
+        "| |__| |   | |   | |__| |  _| |_ ",
+        " \\____/    |_|    \\____/  |_____|"]
+
     init(client: OTClient) {
         self.client = client
     }
@@ -141,24 +149,41 @@ final class TUI {
     }
 
     private func draw(screen: OpaquePointer?) async {
+        let cols: Int32 = 80
+
         werase(screen)
+
+        // Header
         wmove(screen, 0, 0)
-        let banner = "Region: \(client.region) Project: \(client.project)"
-        waddstr(screen, banner)
+        waddstr(screen, "Region: \(client.region)")
         wmove(screen, 1, 0)
+        waddstr(screen, "Project: \(client.project)")
+        wmove(screen, 2, 0)
+        waddstr(screen, "OpenStack Terminal UI")
+
+        // ASCII logo on the right
+        for (idx, line) in logo.enumerated() {
+            let startX = Int32(max(0, Int(cols) - line.count - 1))
+            wmove(screen, Int32(idx), startX)
+            waddstr(screen, line)
+        }
+
+        // Title for current view
         var title = current.title
         if let query = searchQuery { title += " [\(query)]" }
+        wmove(screen, 6, 0)
         waddstr(screen, title)
-        // Refresh early so the banner is visible while data loads
+
+        // Refresh early so the header is visible while data loads
         wrefresh(screen)
 
         let lines = await fetchLines()
-        let maxRows = 18
+        let maxRows = 13
         if scrollOffset > max(0, lines.count - maxRows) {
             scrollOffset = max(0, lines.count - maxRows)
         }
         for (idx, line) in lines.dropFirst(scrollOffset).prefix(maxRows).enumerated() {
-            wmove(screen, Int32(idx + 2), 0)
+            wmove(screen, Int32(idx + 7), 0)
             waddstr(screen, line)
         }
         if let status = statusMessage {
