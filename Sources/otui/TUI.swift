@@ -29,6 +29,7 @@ final class TUI {
     private var scrollOffset = 0
     private var lastTopology: TopologyGraph?
     private var searchQuery: String?
+    private var statusMessage: String?
 
     init(client: OTClient) {
         self.client = client
@@ -80,6 +81,54 @@ final class TUI {
                 if current == .topology {
                     await exportTopology()
                 }
+            case Int32(111): // o start
+                if let id = prompt("Start server ID: ", screen: screen), !id.isEmpty {
+                    do { try await client.startServer(id: id); statusMessage = "Started \(id)" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(112): // p stop
+                if let id = prompt("Stop server ID: ", screen: screen), !id.isEmpty {
+                    do { try await client.stopServer(id: id); statusMessage = "Stopped \(id)" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(97): // a attach port
+                if let sid = prompt("Server ID: ", screen: screen),
+                   let pid = prompt("Port ID: ", screen: screen), !sid.isEmpty, !pid.isEmpty {
+                    do { try await client.attachPort(serverID: sid, portID: pid); statusMessage = "Attached port" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(102): // f alloc fip
+                if let net = prompt("External network ID: ", screen: screen), !net.isEmpty {
+                    let port = prompt("Port ID (optional): ", screen: screen)
+                    do { let fip = try await client.createFloatingIP(networkID: net, portID: port?.isEmpty == true ? nil : port); statusMessage = "FIP \(fip.id)" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(117): // u update fip
+                if let id = prompt("FIP ID: ", screen: screen), !id.isEmpty {
+                    let port = prompt("Port ID (blank to detach): ", screen: screen)
+                    do { _ = try await client.updateFloatingIP(id: id, portID: port?.isEmpty == true ? nil : port); statusMessage = "Updated FIP" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(114): // r delete fip
+                if let id = prompt("Delete FIP ID: ", screen: screen), !id.isEmpty {
+                    do { try await client.deleteFloatingIP(id: id); statusMessage = "Deleted FIP" } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(103): // g add sg rule
+                if let sg = prompt("Security group ID: ", screen: screen), !sg.isEmpty,
+                   let dir = prompt("Direction (ingress/egress): ", screen: screen), !dir.isEmpty {
+                    let proto = prompt("Protocol (optional): ", screen: screen)
+                    let range = prompt("Port range min-max (optional): ", screen: screen)
+                    var min: Int?; var max: Int?
+                    if let r = range, !r.isEmpty {
+                        let parts = r.split(separator: "-")
+                        if let f = parts.first, let v = Int(f) { min = v }
+                        if parts.count > 1, let l = parts.last, let v = Int(l) { max = v }
+                    }
+                    let cidr = prompt("Remote IP prefix (optional): ", screen: screen)
+                    do {
+                        let rule = try await client.createSecurityGroupRule(securityGroupID: sg, direction: dir, protocol: proto?.isEmpty == true ? nil : proto, portRangeMin: min, portRangeMax: max, remoteIPPrefix: cidr?.isEmpty == true ? nil : cidr)
+                        statusMessage = "Rule \(rule.id)"
+                    } catch { statusMessage = "Error \(error)" }
+                }
+            case Int32(100): // d delete sg rule
+                if let rid = prompt("Rule ID: ", screen: screen), !rid.isEmpty {
+                    do { try await client.deleteSecurityGroupRule(id: rid); statusMessage = "Deleted rule" } catch { statusMessage = "Error \(error)" }
+                }
             default:
                 break
             }
@@ -105,8 +154,13 @@ final class TUI {
             wmove(screen, Int32(idx + 2), 0)
             waddstr(screen, line)
         }
+        if let status = statusMessage {
+            wmove(screen, 20, 0)
+            wclrtoeol(screen)
+            waddstr(screen, status)
+        }
         wmove(screen, 21, 0)
-        let footer = "1 Servers 2 Networks 3 Volumes 4 Images 5 Topology | / Search q Quit"
+        let footer = "1 Servers 2 Networks 3 Volumes 4 Images 5 Topology | o start p stop a attach f newFIP u updFIP r delFIP g addRule d delRule / Search q Quit"
         waddstr(screen, footer)
         wrefresh(screen)
     }

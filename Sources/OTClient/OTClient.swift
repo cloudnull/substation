@@ -221,6 +221,51 @@ public struct OTClient: Sendable {
     public func deleteImage(id: String) async throws {
         try await requestVoid(service: "image", method: "DELETE", path: "/v2/images/\(id)", expected: 204)
     }
+
+    // MARK: - Day-2 Operations
+
+    public func startServer(id: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["os-start": NSNull()], options: [])
+        try await requestVoid(service: "compute", method: "POST", path: "/servers/\(id)/action", body: body, expected: 202)
+    }
+
+    public func stopServer(id: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["os-stop": NSNull()], options: [])
+        try await requestVoid(service: "compute", method: "POST", path: "/servers/\(id)/action", body: body, expected: 202)
+    }
+
+    public func attachPort(serverID: String, portID: String) async throws {
+        let payload = AttachPortRequest(interfaceAttachment: .init(portID: portID))
+        let data = try JSONEncoder().encode(payload)
+        try await requestVoid(service: "compute", method: "POST", path: "/servers/\(serverID)/os-interface", body: data, expected: 200)
+    }
+
+    public func createFloatingIP(networkID: String, portID: String? = nil) async throws -> FloatingIP {
+        let data = try JSONEncoder().encode(CreateFloatingIPRequest(floatingip: .init(floatingNetworkID: networkID, portID: portID)))
+        let resp: FloatingIPResponse = try await request(service: "network", method: "POST", path: "/floatingips", body: data, expected: 201)
+        return resp.floatingip
+    }
+
+    public func updateFloatingIP(id: String, portID: String?) async throws -> FloatingIP {
+        let data = try JSONEncoder().encode(UpdateFloatingIPRequest(floatingip: .init(portID: portID)))
+        let resp: FloatingIPResponse = try await request(service: "network", method: "PUT", path: "/floatingips/\(id)", body: data, expected: 200)
+        return resp.floatingip
+    }
+
+    public func deleteFloatingIP(id: String) async throws {
+        try await requestVoid(service: "network", method: "DELETE", path: "/floatingips/\(id)", expected: 204)
+    }
+
+    public func createSecurityGroupRule(securityGroupID: String, direction: String, protocol proto: String?, portRangeMin: Int?, portRangeMax: Int?, remoteIPPrefix: String?) async throws -> SecurityGroupRule {
+        let payload = CreateSecurityGroupRuleRequest(securityGroupRule: .init(securityGroupID: securityGroupID, direction: direction, protocol: proto, portRangeMin: portRangeMin, portRangeMax: portRangeMax, remoteIPPrefix: remoteIPPrefix))
+        let data = try JSONEncoder().encode(payload)
+        let resp: SecurityGroupRuleResponse = try await request(service: "network", method: "POST", path: "/security-group-rules", body: data, expected: 201)
+        return resp.securityGroupRule
+    }
+
+    public func deleteSecurityGroupRule(id: String) async throws {
+        try await requestVoid(service: "network", method: "DELETE", path: "/security-group-rules/\(id)", expected: 204)
+    }
 }
 
 public enum OTError: Error {
@@ -522,4 +567,95 @@ struct ImagePatch: Encodable {
     let op: String
     let path: String
     let value: String
+}
+
+// MARK: Day-2 Model Types
+
+struct AttachPortRequest: Encodable {
+    struct InterfaceAttachment: Encodable {
+        let portID: String
+
+        enum CodingKeys: String, CodingKey {
+            case portID = "port_id"
+        }
+    }
+    let interfaceAttachment: InterfaceAttachment
+}
+
+struct CreateFloatingIPRequest: Encodable {
+    struct Payload: Encodable {
+        let floatingNetworkID: String
+        let portID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case floatingNetworkID = "floating_network_id"
+            case portID = "port_id"
+        }
+    }
+    let floatingip: Payload
+}
+
+struct UpdateFloatingIPRequest: Encodable {
+    struct Payload: Encodable {
+        let portID: String?
+
+        enum CodingKeys: String, CodingKey {
+            case portID = "port_id"
+        }
+    }
+    let floatingip: Payload
+}
+
+struct FloatingIPResponse: Decodable {
+    let floatingip: FloatingIP
+}
+
+public struct SecurityGroupRule: Decodable, Sendable {
+    public let id: String
+    public let direction: String
+    public let protocolType: String?
+    public let portRangeMin: Int?
+    public let portRangeMax: Int?
+    public let remoteIPPrefix: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, direction
+        case protocolType = "protocol"
+        case portRangeMin = "port_range_min"
+        case portRangeMax = "port_range_max"
+        case remoteIPPrefix = "remote_ip_prefix"
+    }
+}
+
+struct CreateSecurityGroupRuleRequest: Encodable {
+    struct Payload: Encodable {
+        let securityGroupID: String
+        let direction: String
+        let `protocol`: String?
+        let portRangeMin: Int?
+        let portRangeMax: Int?
+        let remoteIPPrefix: String?
+
+        enum CodingKeys: String, CodingKey {
+            case securityGroupID = "security_group_id"
+            case direction
+            case `protocol`
+            case portRangeMin = "port_range_min"
+            case portRangeMax = "port_range_max"
+            case remoteIPPrefix = "remote_ip_prefix"
+        }
+    }
+    let securityGroupRule: Payload
+
+    enum CodingKeys: String, CodingKey {
+        case securityGroupRule = "security_group_rule"
+    }
+}
+
+struct SecurityGroupRuleResponse: Decodable {
+    let securityGroupRule: SecurityGroupRule
+
+    enum CodingKeys: String, CodingKey {
+        case securityGroupRule = "security_group_rule"
+    }
 }
