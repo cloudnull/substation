@@ -6,7 +6,9 @@ OTUI is an experimental terminal user interface for OpenStack written in Swift. 
 - Keystone authentication and service discovery
 - CRUD helpers for Nova servers, Neutron networks, Cinder volumes, and Glance images
 - Real-time terminal interface built with ncurses
+  - Persistent banner showing region and project
   - `1` Servers, `2` Networks, `3` Volumes, `4` Images, `5` Topology
+  - `/` Search current view (ESC to clear)
   - `w` Export topology (Topology tab), `q` Quit
 - Cross-platform support for Linux and macOS
 
@@ -44,7 +46,7 @@ Then start the TUI:
 swift run otui
 ```
 
-The interface refreshes every 200ms. Use the number keys to switch resources and `q` to quit.
+The interface refreshes every 200ms. Use the number keys to switch resources, `/` to search the current list, `ESC` to clear the search, and `q` to quit.
 
 ## Topology Graph
 The Topology tab (`5`) renders an ASCII map of the current project's deployment. It walks servers and routers to their attached ports, showing each port's network, subnet, security groups, floating IPs, and any volumes mounted to the server. Press `w` while viewing the tab to export the graph and resource totals to `topology.txt`.
