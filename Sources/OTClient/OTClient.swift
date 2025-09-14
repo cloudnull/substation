@@ -24,6 +24,7 @@ public struct OTClient: Sendable {
     public let token: String
     public let catalog: [CatalogEntry]
     public let region: String
+    public let project: String
 
     public static func connect(config: OTConfig, credentials: OTCredentials) async throws -> OTClient {
         var request = URLRequest(url: config.authURL.appending(path: "/auth/tokens"))
@@ -37,7 +38,7 @@ public struct OTClient: Sendable {
             throw OTError.authenticationFailed
         }
         let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
-        return OTClient(token: token, catalog: tokenResponse.token.catalog, region: config.region)
+        return OTClient(token: token, catalog: tokenResponse.token.catalog, region: config.region, project: config.projectName)
     }
 
     // MARK: - Generic helpers
@@ -140,6 +141,31 @@ public struct OTClient: Sendable {
 
     public func deleteNetwork(id: String) async throws {
         try await requestVoid(service: "network", method: "DELETE", path: "/networks/\(id)", expected: 204)
+    }
+
+    public func listPorts() async throws -> [Port] {
+        let resp: PortListResponse = try await request(service: "network", method: "GET", path: "/ports", expected: 200)
+        return resp.ports
+    }
+
+    public func listSubnets() async throws -> [Subnet] {
+        let resp: SubnetListResponse = try await request(service: "network", method: "GET", path: "/subnets", expected: 200)
+        return resp.subnets
+    }
+
+    public func listRouters() async throws -> [Router] {
+        let resp: RouterListResponse = try await request(service: "network", method: "GET", path: "/routers", expected: 200)
+        return resp.routers
+    }
+
+    public func listFloatingIPs() async throws -> [FloatingIP] {
+        let resp: FloatingIPListResponse = try await request(service: "network", method: "GET", path: "/floatingips", expected: 200)
+        return resp.floatingips
+    }
+
+    public func listSecurityGroups() async throws -> [SecurityGroup] {
+        let resp: SecurityGroupListResponse = try await request(service: "network", method: "GET", path: "/security-groups", expected: 200)
+        return resp.securityGroups
     }
 
     // MARK: - Volumes (Cinder)
@@ -352,11 +378,106 @@ struct UpdateNetworkRequest: Encodable {
     let network: Payload
 }
 
+// MARK: Extended Network Models
+
+public struct Port: Decodable, Sendable {
+    public let id: String
+    public let name: String?
+    public let networkID: String
+    public let deviceID: String?
+    public let fixedIPs: [FixedIP]
+    public let securityGroups: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case networkID = "network_id"
+        case deviceID = "device_id"
+        case fixedIPs = "fixed_ips"
+        case securityGroups = "security_groups"
+    }
+
+    public struct FixedIP: Decodable, Sendable {
+        public let subnetID: String
+        public let ipAddress: String
+
+        enum CodingKeys: String, CodingKey {
+            case subnetID = "subnet_id"
+            case ipAddress = "ip_address"
+        }
+    }
+}
+
+struct PortListResponse: Decodable {
+    let ports: [Port]
+}
+
+public struct Subnet: Decodable, Sendable {
+    public let id: String
+    public let name: String?
+    public let networkID: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case networkID = "network_id"
+    }
+}
+
+struct SubnetListResponse: Decodable {
+    let subnets: [Subnet]
+}
+
+public struct Router: Decodable, Sendable {
+    public let id: String
+    public let name: String?
+}
+
+struct RouterListResponse: Decodable {
+    let routers: [Router]
+}
+
+public struct FloatingIP: Decodable, Sendable {
+    public let id: String
+    public let floatingIPAddress: String
+    public let portID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case floatingIPAddress = "floating_ip_address"
+        case portID = "port_id"
+    }
+}
+
+struct FloatingIPListResponse: Decodable {
+    let floatingips: [FloatingIP]
+}
+
+public struct SecurityGroup: Decodable, Sendable {
+    public let id: String
+    public let name: String
+}
+
+struct SecurityGroupListResponse: Decodable {
+    let securityGroups: [SecurityGroup]
+
+    enum CodingKeys: String, CodingKey {
+        case securityGroups = "security_groups"
+    }
+}
+
 // MARK: Volume Models
 
 public struct Volume: Decodable, Sendable {
     public let id: String
     public var name: String?
+    public let attachments: [Attachment]
+
+    public struct Attachment: Decodable, Sendable {
+        public let serverId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case serverId = "server_id"
+        }
+    }
 }
 
 struct VolumeListResponse: Decodable {
