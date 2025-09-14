@@ -9,4 +9,9 @@ final class OTClientTests: XCTestCase {
         XCTAssertEqual(config.region, "RegionOne")
         XCTAssertEqual(config.projectName, "demo")
     }
+
+    func testClientStoresProject() {
+        let client = OTClient(token: "t", catalog: [], region: "RegionOne", project: "demo")
+        XCTAssertEqual(client.project, "demo")
+    }
 }
