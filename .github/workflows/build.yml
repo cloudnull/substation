@@ -1,0 +1,36 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: swift-actions/setup-swift@v1
+        with:
+          swift-version: '5.8'
+      - name: Build
+        run: swift build -c release
+      - name: Test
+        run: swift test
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp .build/release/otui dist/
+          tar czf otui-${{ matrix.platform }}.tar.gz -C dist otui
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: otui-${{ matrix.platform }}
+          path: otui-${{ matrix.platform }}.tar.gz
