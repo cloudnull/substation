@@ -32,12 +32,11 @@ final class TUI {
     private var statusMessage: String?
 
     private let logo = [
-        "  ____   _______   _    _   _____ ",
-        " / __ \\ |__   __| | |  | | |_   _|",
-        "| |  | |   | |   | |  | |   | |  ",
-        "| |  | |   | |   | |  | |   | |  ",
-        "| |__| |   | |   | |__| |  _| |_ ",
-        " \\____/    |_|    \\____/  |_____|"]
+        "  _  __",
+        " | |/ /___  ___",
+        " | ' // _ \\ / _ \\",
+        " | . \\  __/  __/",
+        " |_|\\_\\___|\\___|"]
 
     init(client: OTClient) {
         self.client = client
@@ -49,6 +48,12 @@ final class TUI {
         noecho()
         keypad(screen, true)
         nodelay(screen, true)
+        start_color()
+        use_default_colors()
+        init_pair(1, Int16(COLOR_CYAN), Int16(-1))
+        init_pair(2, Int16(COLOR_YELLOW), Int16(-1))
+        init_pair(3, Int16(COLOR_BLACK), Int16(COLOR_YELLOW))
+        init_pair(4, Int16(COLOR_MAGENTA), Int16(-1))
         defer { endwin() }
 
         // Draw once so the user sees the interface immediately
@@ -148,52 +153,65 @@ final class TUI {
         }
     }
 
+    private func colorPair(_ n: Int32) -> Int32 { n << 8 }
+
     private func draw(screen: OpaquePointer?) async {
         let cols: Int32 = 80
 
         werase(screen)
 
-        // Header
+        // Header section
+        wattron(screen, colorPair(1))
         wmove(screen, 0, 0)
-        waddstr(screen, "Region: \(client.region)")
+        waddstr(screen, "context: \(client.project)")
         wmove(screen, 1, 0)
-        waddstr(screen, "Project: \(client.project)")
+        waddstr(screen, "cluster: \(client.region)")
         wmove(screen, 2, 0)
-        waddstr(screen, "OpenStack Terminal UI")
+        waddstr(screen, "K8s Ver. v0.0.0")
+        let lines = await fetchLines()
+        wmove(screen, 3, 0)
+        waddstr(screen, "Pods(all)[\(lines.count)]")
+        wattroff(screen, colorPair(1))
 
         // ASCII logo on the right
+        wattron(screen, colorPair(2))
         for (idx, line) in logo.enumerated() {
             let startX = Int32(max(0, Int(cols) - line.count - 1))
             wmove(screen, Int32(idx), startX)
             waddstr(screen, line)
         }
+        wattroff(screen, colorPair(2))
 
-        // Title for current view
-        var title = current.title
-        if let query = searchQuery { title += " [\(query)]" }
-        wmove(screen, 6, 0)
-        waddstr(screen, title)
+        // Table header
+        wattron(screen, colorPair(2))
+        wmove(screen, 5, 0)
+        waddstr(screen, "NAMESPACE       NAME                            P/F READY STATUS   RESTARTS CPU MEM")
+        wattroff(screen, colorPair(2))
 
-        // Refresh early so the header is visible while data loads
-        wrefresh(screen)
-
-        let lines = await fetchLines()
         let maxRows = 13
         if scrollOffset > max(0, lines.count - maxRows) {
             scrollOffset = max(0, lines.count - maxRows)
         }
         for (idx, line) in lines.dropFirst(scrollOffset).prefix(maxRows).enumerated() {
-            wmove(screen, Int32(idx + 7), 0)
-            waddstr(screen, line)
+            wmove(screen, Int32(idx + 6), 0)
+            if idx == 0 {
+                wattron(screen, colorPair(3))
+                waddstr(screen, ">\(line)")
+                wattroff(screen, colorPair(3))
+            } else {
+                waddstr(screen, " \(line)")
+            }
         }
         if let status = statusMessage {
-            wmove(screen, 20, 0)
+            wmove(screen, 19, 0)
             wclrtoeol(screen)
             waddstr(screen, status)
         }
+        wattron(screen, colorPair(4))
         wmove(screen, 21, 0)
-        let footer = "1 Servers 2 Networks 3 Volumes 4 Images 5 Topology | o start p stop a attach f newFIP u updFIP r delFIP g addRule d delRule / Search q Quit"
-        waddstr(screen, footer)
+        wclrtoeol(screen)
+        waddstr(screen, "<pod>")
+        wattroff(screen, colorPair(4))
         wrefresh(screen)
     }
 
