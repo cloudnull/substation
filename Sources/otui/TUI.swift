@@ -43,8 +43,10 @@ final class TUI {
         nodelay(screen, true)
         defer { endwin() }
 
+        // Draw once so the user sees the interface immediately
+        await draw(screen: screen)
+
         while running {
-            await draw(screen: screen)
             let ch = wgetch(screen)
             switch ch {
             case Int32(113): // q
@@ -132,17 +134,14 @@ final class TUI {
             default:
                 break
             }
+            if !running { break }
+            await draw(screen: screen)
             usleep(200_000) // 200ms refresh
         }
     }
 
     private func draw(screen: OpaquePointer?) async {
         werase(screen)
-        let lines = await fetchLines()
-        let maxRows = 18
-        if scrollOffset > max(0, lines.count - maxRows) {
-            scrollOffset = max(0, lines.count - maxRows)
-        }
         wmove(screen, 0, 0)
         let banner = "Region: \(client.region) Project: \(client.project)"
         waddstr(screen, banner)
@@ -150,6 +149,14 @@ final class TUI {
         var title = current.title
         if let query = searchQuery { title += " [\(query)]" }
         waddstr(screen, title)
+        // Refresh early so the banner is visible while data loads
+        wrefresh(screen)
+
+        let lines = await fetchLines()
+        let maxRows = 18
+        if scrollOffset > max(0, lines.count - maxRows) {
+            scrollOffset = max(0, lines.count - maxRows)
+        }
         for (idx, line) in lines.dropFirst(scrollOffset).prefix(maxRows).enumerated() {
             wmove(screen, Int32(idx + 2), 0)
             waddstr(screen, line)
