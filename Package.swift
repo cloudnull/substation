@@ -30,6 +30,10 @@ let package = Package(
         .testTarget(
             name: "OTClientTests",
             dependencies: ["OTClient"]
+        ),
+        .testTarget(
+            name: "TUITests",
+            dependencies: ["otui"]
         )
     ]
 )

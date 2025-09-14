@@ -28,6 +28,7 @@ final class TUI {
     private var running = true
     private var scrollOffset = 0
     private var lastTopology: TopologyGraph?
+    private var searchQuery: String?
 
     init(client: OTClient) {
         self.client = client
@@ -66,6 +67,15 @@ final class TUI {
                 scrollOffset = max(scrollOffset - 1, 0)
             case Int32(258): // KEY_DOWN
                 scrollOffset += 1
+            case Int32(47): // /
+                if let input = prompt("Search: ", screen: screen), !input.isEmpty {
+                    searchQuery = input
+                    scrollOffset = 0
+                } else {
+                    searchQuery = nil
+                }
+            case Int32(27): // ESC
+                searchQuery = nil
             case Int32(119): // w
                 if current == .topology {
                     await exportTopology()
@@ -85,13 +95,18 @@ final class TUI {
             scrollOffset = max(0, lines.count - maxRows)
         }
         wmove(screen, 0, 0)
-        waddstr(screen, current.title)
+        let banner = "Region: \(client.region) Project: \(client.project)"
+        waddstr(screen, banner)
+        wmove(screen, 1, 0)
+        var title = current.title
+        if let query = searchQuery { title += " [\(query)]" }
+        waddstr(screen, title)
         for (idx, line) in lines.dropFirst(scrollOffset).prefix(maxRows).enumerated() {
-            wmove(screen, Int32(idx + 1), 0)
+            wmove(screen, Int32(idx + 2), 0)
             waddstr(screen, line)
         }
-        wmove(screen, 20, 0)
-        let footer = "1 Servers 2 Networks 3 Volumes 4 Images 5 Topology | q Quit"
+        wmove(screen, 21, 0)
+        let footer = "1 Servers 2 Networks 3 Volumes 4 Images 5 Topology | / Search q Quit"
         waddstr(screen, footer)
         wrefresh(screen)
     }
@@ -100,21 +115,41 @@ final class TUI {
         switch current {
         case .servers:
             let servers = (try? await client.listServers()) ?? []
-            return servers.map { "\($0.name) \($0.id)" }
+            let lines = servers.map { "\($0.name) \($0.id)" }
+            return filterLines(lines, query: searchQuery)
         case .networks:
             let nets = (try? await client.listNetworks()) ?? []
-            return nets.map { "\($0.name) \($0.id)" }
+            let lines = nets.map { "\($0.name) \($0.id)" }
+            return filterLines(lines, query: searchQuery)
         case .volumes:
             let vols = (try? await client.listVolumes()) ?? []
-            return vols.map { "\($0.name ?? "") \($0.id)" }
+            let lines = vols.map { "\($0.name ?? "") \($0.id)" }
+            return filterLines(lines, query: searchQuery)
         case .images:
             let imgs = (try? await client.listImages()) ?? []
-            return imgs.map { "\($0.name ?? "") \($0.id)" }
+            let lines = imgs.map { "\($0.name ?? "") \($0.id)" }
+            return filterLines(lines, query: searchQuery)
         case .topology:
             let graph = await TopologyGraphBuilder.build(client: client)
             lastTopology = graph
-            return graph.lines
+            return filterLines(graph.lines, query: searchQuery)
         }
+    }
+
+    private func prompt(_ text: String, screen: OpaquePointer?) -> String? {
+        echo()
+        nodelay(screen, false)
+        defer {
+            noecho()
+            nodelay(screen, true)
+        }
+        wmove(screen, 22, 0)
+        wclrtoeol(screen)
+        waddstr(screen, text)
+        let buf = UnsafeMutablePointer<CChar>.allocate(capacity: 256)
+        defer { buf.deallocate() }
+        wgetnstr(screen, buf, 255)
+        return String(cString: buf)
     }
 
     private func exportTopology() async {
