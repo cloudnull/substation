@@ -3,7 +3,7 @@ import Foundation
 enum ViewMode: CaseIterable {
     case dashboard, servers, networks, volumes, images, flavors, topology
     case serverDetail, networkDetail, volumeDetail, imageDetail, flavorDetail
-    case serverCreate, keyPairs, keyPairDetail, help, serverSecurityGroups
+    case serverCreate, keyPairs, keyPairDetail, help, serverSecurityGroups, serverNetworkInterfaces
 
     var title: String {
         switch self {
@@ -24,6 +24,7 @@ enum ViewMode: CaseIterable {
             case .keyPairDetail: return "Key Pair Details"
             case .help: return "Help"
             case .serverSecurityGroups: return "Manage Security Groups"
+            case .serverNetworkInterfaces: return "Manage Network Interfaces"
         }
     }
 
@@ -46,12 +47,13 @@ enum ViewMode: CaseIterable {
         case .keyPairDetail: return ""
         case .help: return "?"
         case .serverSecurityGroups: return ""
+        case .serverNetworkInterfaces: return ""
         }
     }
 
     var isDetailView: Bool {
         switch self {
-        case .serverDetail, .networkDetail, .volumeDetail, .imageDetail, .flavorDetail, .serverCreate, .keyPairDetail, .serverSecurityGroups:
+        case .serverDetail, .networkDetail, .volumeDetail, .imageDetail, .flavorDetail, .serverCreate, .keyPairDetail, .serverSecurityGroups, .serverNetworkInterfaces:
             return true
         default:
             return false
@@ -68,6 +70,7 @@ enum ViewMode: CaseIterable {
         case .serverCreate: return .servers
         case .keyPairDetail: return .keyPairs
         case .serverSecurityGroups: return .servers
+        case .serverNetworkInterfaces: return .servers
         default: return self
         }
     }

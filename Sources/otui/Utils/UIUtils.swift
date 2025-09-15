@@ -11,7 +11,7 @@ struct UIUtils {
         case .dashboard:
             return "\(baseCommands) S:servers N:networks V:volumes I:images F:flavors T:topology r:refresh a:auto-refresh"
         case .servers:
-            return "\(baseCommands) SPACE:details B:create G:security-groups R:restart Z:resize S:start T:stop L:logs DEL:delete /:search ESC:back"
+            return "\(baseCommands) SPACE:details B:create G:security-groups I:interfaces R:restart Z:resize S:start T:stop L:logs DEL:delete /:search ESC:back"
         case .networks:
             return "\(baseCommands) SPACE:details /:search ESC:back"
         case .volumes:
@@ -29,6 +29,8 @@ struct UIUtils {
         case .serverCreate:
             return "\(baseCommands) TAB:navigate ←→:change ENTER:edit/create ESC:cancel"
         case .serverSecurityGroups:
+            return "\(baseCommands) TAB:mode SPACE:toggle ENTER:apply ESC:back"
+        case .serverNetworkInterfaces:
             return "\(baseCommands) TAB:mode SPACE:toggle ENTER:apply ESC:back"
         case .help:
             return "\(baseCommands) ESC:back"

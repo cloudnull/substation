@@ -342,6 +342,15 @@ public struct OTClient: Sendable {
         try await requestVoid(service: "compute", method: "POST", path: "/servers/\(serverID)/os-interface", body: data, expected: 200)
     }
 
+    public func detachPort(serverID: String, portID: String) async throws {
+        try await requestVoid(service: "compute", method: "DELETE", path: "/servers/\(serverID)/os-interface/\(portID)", expected: 202)
+    }
+
+    public func getServerInterfaces(serverID: String) async throws -> [ServerInterface] {
+        let resp: ServerInterfacesResponse = try await request(service: "compute", method: "GET", path: "/servers/\(serverID)/os-interface", expected: 200)
+        return resp.interfaceAttachments
+    }
+
     public func createFloatingIP(networkID: String, portID: String? = nil) async throws -> FloatingIP {
         let data = try JSONEncoder().encode(CreateFloatingIPRequest(floatingip: .init(floatingNetworkID: networkID, portID: portID)))
         let resp: FloatingIPResponse = try await request(service: "network", method: "POST", path: "/v2.0/floatingips", body: data, expected: 201)
@@ -730,6 +739,40 @@ public struct Port: Decodable, Sendable {
 
 struct PortListResponse: Decodable {
     let ports: [Port]
+}
+
+public struct ServerInterface: Decodable, Sendable {
+    public let portID: String
+    public let portState: String?
+    public let netID: String
+    public let macAddr: String?
+    public let fixedIPs: [FixedIP]?
+
+    enum CodingKeys: String, CodingKey {
+        case portID = "port_id"
+        case portState = "port_state"
+        case netID = "net_id"
+        case macAddr = "mac_addr"
+        case fixedIPs = "fixed_ips"
+    }
+
+    public struct FixedIP: Decodable, Sendable {
+        public let subnetID: String
+        public let ipAddress: String
+
+        enum CodingKeys: String, CodingKey {
+            case subnetID = "subnet_id"
+            case ipAddress = "ip_address"
+        }
+    }
+}
+
+struct ServerInterfacesResponse: Decodable {
+    let interfaceAttachments: [ServerInterface]
+
+    enum CodingKeys: String, CodingKey {
+        case interfaceAttachments = "interfaceAttachments"
+    }
 }
 
 public struct Subnet: Decodable, Sendable {

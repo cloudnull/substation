@@ -59,6 +59,9 @@ final class TUI {
     // Security group management form state
     private var securityGroupForm = SecurityGroupManagementForm()
 
+    // Network interface management form state
+    private var networkInterfaceForm = NetworkInterfaceManagementForm()
+
     init(client: OTClient) {
         self.client = client
     }
@@ -202,6 +205,17 @@ final class TUI {
             }
             // Delegate all other input to security group handler
             await handleSecurityGroupInput(ch, screen: screen)
+            return
+        }
+
+        if currentView == .serverNetworkInterfaces {
+            // Special handling for ESC in network interface management
+            if ch == 27 { // ESC
+                changeView(to: .servers, resetSelection: false)
+                return
+            }
+            // Delegate all other input to network interface handler
+            await handleNetworkInterfaceInput(ch, screen: screen)
             return
         }
 
@@ -364,6 +378,10 @@ final class TUI {
         case Int32(71): // G - Manage security groups for selected server
             if currentView == .servers && !currentView.isDetailView {
                 await manageServerSecurityGroups(screen: screen)
+            }
+        case Int32(73): // I - Manage network interfaces for selected server
+            if currentView == .servers && !currentView.isDetailView {
+                await manageServerNetworkInterfaces(screen: screen)
             }
         default:
             break
@@ -653,6 +671,196 @@ final class TUI {
             }
         } else if errorCount > 0 {
             statusMessage = "All \(errorCount) security group operations failed"
+        } else {
+            statusMessage = "No changes to apply"
+        }
+    }
+
+    private func handleNetworkInterfaceInput(_ ch: Int32, screen: OpaquePointer?) async {
+        switch ch {
+        case Int32(9): // TAB - Switch operation mode
+            let operations = NetworkInterfaceManagementForm.NetworkInterfaceOperation.allCases
+            if let currentIndex = operations.firstIndex(of: networkInterfaceForm.selectedOperation) {
+                let nextIndex = (currentIndex + 1) % operations.count
+                networkInterfaceForm.selectedOperation = operations[nextIndex]
+                networkInterfaceForm.selectedPortIndex = 0 // Reset selection
+            }
+        case Int32(259): // UP
+            switch networkInterfaceForm.selectedOperation {
+            case .view:
+                let ports = networkInterfaceForm.serverInterfaces.compactMap { interface in
+                    networkInterfaceForm.getPortForInterface(interface)
+                }
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = max(0, networkInterfaceForm.selectedPortIndex - 1)
+                }
+            case .attach:
+                let ports = networkInterfaceForm.getAvailablePortsForAttach()
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = max(0, networkInterfaceForm.selectedPortIndex - 1)
+                }
+            case .detach:
+                let ports = networkInterfaceForm.getPortsForDetach()
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = max(0, networkInterfaceForm.selectedPortIndex - 1)
+                }
+            }
+        case Int32(258): // DOWN
+            switch networkInterfaceForm.selectedOperation {
+            case .view:
+                let ports = networkInterfaceForm.serverInterfaces.compactMap { interface in
+                    networkInterfaceForm.getPortForInterface(interface)
+                }
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = min(ports.count - 1, networkInterfaceForm.selectedPortIndex + 1)
+                }
+            case .attach:
+                let ports = networkInterfaceForm.getAvailablePortsForAttach()
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = min(ports.count - 1, networkInterfaceForm.selectedPortIndex + 1)
+                }
+            case .detach:
+                let ports = networkInterfaceForm.getPortsForDetach()
+                if !ports.isEmpty {
+                    networkInterfaceForm.selectedPortIndex = min(ports.count - 1, networkInterfaceForm.selectedPortIndex + 1)
+                }
+            }
+        case Int32(32): // SPACE - Toggle port selection
+            switch networkInterfaceForm.selectedOperation {
+            case .view:
+                break // No action in view mode
+            case .attach:
+                let availablePorts = networkInterfaceForm.getAvailablePortsForAttach()
+                if networkInterfaceForm.selectedPortIndex < availablePorts.count {
+                    let selectedPort = availablePorts[networkInterfaceForm.selectedPortIndex]
+                    networkInterfaceForm.togglePort(selectedPort.id)
+                }
+            case .detach:
+                let detachPorts = networkInterfaceForm.getPortsForDetach()
+                if networkInterfaceForm.selectedPortIndex < detachPorts.count {
+                    let selectedPort = detachPorts[networkInterfaceForm.selectedPortIndex]
+                    networkInterfaceForm.togglePort(selectedPort.id)
+                }
+            }
+        case Int32(10), Int32(13): // ENTER - Apply changes
+            if networkInterfaceForm.hasPendingChanges() {
+                await applyNetworkInterfaceChanges(screen: screen)
+            }
+        default:
+            break
+        }
+    }
+
+    private func applyNetworkInterfaceChanges(screen: OpaquePointer?) async {
+        guard let server = networkInterfaceForm.selectedServer else {
+            statusMessage = "No server selected"
+            return
+        }
+
+        let serverName = server.name ?? "Unnamed Server"
+        var changeCount = 0
+        var errorCount = 0
+
+        // Apply attachments
+        for portID in networkInterfaceForm.pendingAttachments {
+            if let port = networkInterfaceForm.availablePorts.first(where: { $0.id == portID }) {
+                let portName = port.name ?? port.id
+                statusMessage = "Attaching port '\(portName)' to \(serverName)..."
+                await draw(screen: screen)
+
+                do {
+                    try await client.attachPort(serverID: server.id, portID: port.id)
+                    changeCount += 1
+                } catch let error as OTError {
+                    errorCount += 1
+                    let baseMsg = "Failed to attach port '\(portName)'"
+                    switch error {
+                    case .authenticationFailed:
+                        statusMessage = "\(baseMsg): Authentication failed"
+                    case .endpointNotFound:
+                        statusMessage = "\(baseMsg): Endpoint not found"
+                    case .unexpectedResponse:
+                        statusMessage = "\(baseMsg): Unexpected response"
+                    case .httpError(let code):
+                        if code == 409 {
+                            statusMessage = "\(baseMsg): Already attached"
+                        } else if code == 404 {
+                            statusMessage = "\(baseMsg): Port not found"
+                        } else {
+                            statusMessage = "\(baseMsg): HTTP error \(code)"
+                        }
+                    }
+                    await draw(screen: screen)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 second pause for error
+                } catch {
+                    errorCount += 1
+                    statusMessage = "Failed to attach port '\(portName)': \(error.localizedDescription)"
+                    await draw(screen: screen)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+            }
+        }
+
+        // Apply detachments
+        for portID in networkInterfaceForm.pendingDetachments {
+            if let port = networkInterfaceForm.availablePorts.first(where: { $0.id == portID }) {
+                let portName = port.name ?? port.id
+                statusMessage = "Detaching port '\(portName)' from \(serverName)..."
+                await draw(screen: screen)
+
+                do {
+                    try await client.detachPort(serverID: server.id, portID: port.id)
+                    changeCount += 1
+                } catch let error as OTError {
+                    errorCount += 1
+                    let baseMsg = "Failed to detach port '\(portName)'"
+                    switch error {
+                    case .authenticationFailed:
+                        statusMessage = "\(baseMsg): Authentication failed"
+                    case .endpointNotFound:
+                        statusMessage = "\(baseMsg): Endpoint not found"
+                    case .unexpectedResponse:
+                        statusMessage = "\(baseMsg): Unexpected response"
+                    case .httpError(let code):
+                        if code == 409 {
+                            statusMessage = "\(baseMsg): Cannot detach (conflict)"
+                        } else if code == 404 {
+                            statusMessage = "\(baseMsg): Port not found"
+                        } else {
+                            statusMessage = "\(baseMsg): HTTP error \(code)"
+                        }
+                    }
+                    await draw(screen: screen)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                } catch {
+                    errorCount += 1
+                    statusMessage = "Failed to detach port '\(portName)': \(error.localizedDescription)"
+                    await draw(screen: screen)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+            }
+        }
+
+        // Summary and refresh
+        if changeCount > 0 {
+            var message = "Applied \(changeCount) network interface changes"
+            if errorCount > 0 {
+                message += " (with \(errorCount) errors)"
+            }
+            statusMessage = message
+
+            // Clear pending changes
+            networkInterfaceForm.pendingAttachments.removeAll()
+            networkInterfaceForm.pendingDetachments.removeAll()
+
+            // Refresh network interfaces
+            do {
+                networkInterfaceForm.serverInterfaces = try await client.getServerInterfaces(serverID: server.id)
+            } catch {
+                statusMessage = message + " - Warning: Failed to refresh network interfaces"
+            }
+        } else if errorCount > 0 {
+            statusMessage = "All \(errorCount) network interface operations failed"
         } else {
             statusMessage = "No changes to apply"
         }
@@ -1130,6 +1338,59 @@ final class TUI {
             securityGroupForm.isLoading = false
             securityGroupForm.errorMessage = "Failed to load security groups: \(error.localizedDescription)"
             statusMessage = securityGroupForm.errorMessage
+        }
+    }
+
+    private func manageServerNetworkInterfaces(screen: OpaquePointer?) async {
+        guard currentView == .servers else { return }
+
+        let resourceResolver = createResourceResolver()
+        let filteredServers = ResourceFilters.filterServers(cachedServers, query: searchQuery, getServerIP: resourceResolver.getServerIP)
+        guard selectedIndex < filteredServers.count else {
+            statusMessage = "No server selected"
+            return
+        }
+
+        let server = filteredServers[selectedIndex]
+
+        // Initialize the network interface form
+        networkInterfaceForm.selectedServer = server
+        networkInterfaceForm.reset()
+        networkInterfaceForm.isLoading = true
+
+        // Switch to network interface management view
+        changeView(to: .serverNetworkInterfaces, resetSelection: false)
+        await draw(screen: screen)
+
+        // Load network interfaces data
+        do {
+            async let serverInterfaces = client.getServerInterfaces(serverID: server.id)
+            async let allPorts = client.listPorts()
+
+            networkInterfaceForm.serverInterfaces = try await serverInterfaces
+            networkInterfaceForm.availablePorts = try await allPorts
+            networkInterfaceForm.isLoading = false
+            networkInterfaceForm.errorMessage = nil
+
+            statusMessage = "Network interfaces loaded for \(server.name ?? "server")"
+        } catch let error as OTError {
+            networkInterfaceForm.isLoading = false
+            let baseMsg = "Failed to load network interfaces"
+            switch error {
+            case .authenticationFailed:
+                networkInterfaceForm.errorMessage = "\(baseMsg): Authentication failed"
+            case .endpointNotFound:
+                networkInterfaceForm.errorMessage = "\(baseMsg): Endpoint not found"
+            case .unexpectedResponse:
+                networkInterfaceForm.errorMessage = "\(baseMsg): Unexpected response"
+            case .httpError(let code):
+                networkInterfaceForm.errorMessage = "\(baseMsg): HTTP error \(code)"
+            }
+            statusMessage = networkInterfaceForm.errorMessage
+        } catch {
+            networkInterfaceForm.isLoading = false
+            networkInterfaceForm.errorMessage = "Failed to load network interfaces: \(error.localizedDescription)"
+            statusMessage = networkInterfaceForm.errorMessage
         }
     }
 
@@ -1628,6 +1889,8 @@ final class TUI {
             await MiscViews.drawServerCreate(screen: screen, startRow: mainStartRow, startCol: mainStartCol, width: mainWidth, height: mainHeight, serverCreateForm: serverCreateForm, cachedImages: cachedImages, cachedFlavors: cachedFlavors, cachedNetworks: cachedNetworks, cachedSecurityGroups: cachedSecurityGroups, cachedKeyPairs: cachedKeyPairs, cachedVolumes: cachedVolumes)
         case .serverSecurityGroups:
             await SecurityGroupManagementView.draw(screen: screen, startRow: mainStartRow, startCol: mainStartCol, width: mainWidth, height: mainHeight, form: securityGroupForm)
+        case .serverNetworkInterfaces:
+            await NetworkInterfaceManagementView.draw(screen: screen, startRow: mainStartRow, startCol: mainStartCol, width: mainWidth, height: mainHeight, form: networkInterfaceForm, resourceNameCache: resourceNameCache)
         case .help:
             await MiscViews.drawHelp(screen: screen, startRow: mainStartRow, startCol: mainStartCol, width: mainWidth, height: mainHeight, scrollOffset: helpScrollOffset)
         }

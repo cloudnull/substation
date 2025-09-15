@@ -30,6 +30,8 @@ struct ViewUtils {
             return "\(baseCommands) TAB:navigate ←→:change ENTER:edit/create ESC:cancel"
         case .serverSecurityGroups:
             return "\(baseCommands) TAB:mode SPACE:toggle ENTER:apply ESC:back"
+        case .serverNetworkInterfaces:
+            return "\(baseCommands) TAB:mode SPACE:toggle ENTER:apply ESC:back"
         case .help:
             return "\(baseCommands) ESC:back"
         }
